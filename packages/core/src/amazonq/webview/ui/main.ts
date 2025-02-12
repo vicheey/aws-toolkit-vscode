@@ -26,7 +26,7 @@ import { TextMessageHandler } from './messages/handler'
 import { MessageController } from './messages/controller'
 import { getActions, getDetails } from './diffTree/actions'
 import { DiffTreeFileInfo } from './diffTree/types'
-import { FeatureContext } from '../../../shared'
+import { FeatureContext } from '../../../shared/featureConfig'
 import { tryNewMap } from '../../util/functionUtils'
 import { welcomeScreenTabData } from './walkthrough/welcome'
 import { agentWalkthroughDataModel } from './walkthrough/agent'
@@ -106,6 +106,10 @@ export const createMynahUI = (
 
     let isDocEnabled = amazonQEnabled
 
+    let featureConfigs: Map<string, FeatureContext> = tryNewMap(featureConfigsSerialized)
+
+    const highlightCommand = featureConfigs.get('highlightCommand')
+
     let tabDataGenerator = new TabDataGenerator({
         isFeatureDevEnabled,
         isGumbyEnabled,
@@ -113,6 +117,7 @@ export const createMynahUI = (
         isTestEnabled,
         isDocEnabled,
         disabledCommands,
+        commandHighlight: highlightCommand,
     })
 
     // eslint-disable-next-line prefer-const
@@ -123,9 +128,6 @@ export const createMynahUI = (
     let textMessageHandler: TextMessageHandler
     // eslint-disable-next-line prefer-const
     let messageController: MessageController
-
-    // @ts-ignore
-    let featureConfigs: Map<string, FeatureContext> = tryNewMap(featureConfigsSerialized)
 
     function getCodeBlockActions(messageData: any) {
         // Show ViewDiff and AcceptDiff for allowedCommands in CWC
@@ -199,6 +201,7 @@ export const createMynahUI = (
                 isTestEnabled,
                 isDocEnabled,
                 disabledCommands,
+                commandHighlight: highlightCommand,
             })
 
             featureConfigs = tryNewMap(featureConfigsSerialized)
@@ -663,10 +666,10 @@ export const createMynahUI = (
                     ideApi.postMessage(createClickTelemetry('amazonq-disclaimer-acknowledge-button'))
 
                     // remove all disclaimer cards from all tabs
-                    Object.keys(mynahUI.getAllTabs()).forEach((storeTabKey) => {
+                    for (const storeTabKey of Object.keys(mynahUI.getAllTabs())) {
                         // eslint-disable-next-line unicorn/no-null
                         mynahUI.updateStore(storeTabKey, { promptInputStickyCard: null })
-                    })
+                    }
                     return
                 }
                 case 'quick-start': {
@@ -830,6 +833,12 @@ export const createMynahUI = (
             mouseEvent?.stopPropagation()
             mouseEvent?.stopImmediatePropagation()
             connector.onResponseBodyLinkClick(tabId, messageId, link)
+        },
+        onFormLinkClick: (link, mouseEvent) => {
+            mouseEvent?.preventDefault()
+            mouseEvent?.stopPropagation()
+            mouseEvent?.stopImmediatePropagation()
+            connector.onLinkClick(link)
         },
         onInfoLinkClick: (tabId: string, link: string, mouseEvent?: MouseEvent) => {
             mouseEvent?.preventDefault()

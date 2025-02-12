@@ -22,7 +22,7 @@ import { ActivationReloadState, SamInitState } from '../../shared/activationRelo
 import { AwsContext } from '../../shared/awsContext'
 
 import { fileExists, isInDirectory, readFileAsString } from '../../shared/filesystemUtilities'
-import { getLogger } from '../../shared/logger'
+import { getLogger } from '../../shared/logger/logger'
 import { RegionProvider } from '../../shared/regions/regionProvider'
 import { getSamCliVersion, getSamCliContext, SamCliContext } from '../../shared/sam/cli/samCliContext'
 import { runSamCliInit, SamCliInitArgs } from '../../shared/sam/cli/samCliInit'
@@ -39,19 +39,14 @@ import { isTemplateTargetProperties } from '../../shared/sam/debugger/awsSamDebu
 import { TemplateTargetProperties } from '../../shared/sam/debugger/awsSamDebugConfiguration'
 import { openLaunchJsonFile } from '../../shared/sam/debugger/commands/addSamDebugConfiguration'
 import { waitUntil } from '../../shared/utilities/timeoutUtils'
-import {
-    getIdeProperties,
-    getDebugNewSamAppDocUrl,
-    isCloud9,
-    getLaunchConfigDocUrl,
-} from '../../shared/extensionUtilities'
+import { getIdeProperties, getDebugNewSamAppDocUrl, getLaunchConfigDocUrl } from '../../shared/extensionUtilities'
 import { checklogs } from '../../shared/localizedText'
 import globals from '../../shared/extensionGlobals'
 import { telemetry } from '../../shared/telemetry/telemetry'
 import { LambdaArchitecture, Result, Runtime } from '../../shared/telemetry/telemetry'
 import { getTelemetryReason, getTelemetryResult } from '../../shared/errors'
 import { openUrl, replaceVscodeVars } from '../../shared/utilities/vsCodeUtils'
-import { fs } from '../../shared'
+import { fs } from '../../shared/fs/fs'
 import { ChildProcess } from '../../shared/utilities/processUtils'
 
 export const samInitTemplateFiles: string[] = ['template.yaml', 'template.yml']
@@ -417,12 +412,12 @@ export async function addInitialLaunchConfiguration(
 
         // optional for ZIP-lambdas but required for Image-lambdas
         if (runtime !== undefined) {
-            filtered.forEach((configuration) => {
+            for (const configuration of filtered) {
                 if (!configuration.lambda) {
                     configuration.lambda = {}
                 }
                 configuration.lambda.runtime = runtime
-            })
+            }
         }
 
         await launchConfiguration.addDebugConfigurations(filtered)
@@ -473,9 +468,7 @@ export async function writeToolkitReadme(
             .replace(/\$\{LISTOFCONFIGURATIONS\}/g, configString)
             .replace(
                 /\$\{DOCURL\}/g,
-                isCloud9()
-                    ? 'https://docs.aws.amazon.com/cloud9/latest/user-guide/serverless-apps-toolkit.html'
-                    : 'https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/serverless-apps.html'
+                'https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/serverless-apps.html'
             )
 
         await fs.writeFile(readmeLocation, readme)

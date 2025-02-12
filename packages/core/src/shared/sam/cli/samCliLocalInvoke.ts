@@ -6,7 +6,7 @@
 import { SpawnOptions } from 'child_process' // eslint-disable-line no-restricted-imports
 import { pushIf } from '../../utilities/collectionUtils'
 import * as nls from 'vscode-nls'
-import { getLogger, getDebugConsoleLogger, Logger } from '../../logger'
+import { getLogger, getDebugConsoleLogger, Logger } from '../../logger/logger'
 import { ChildProcess } from '../../utilities/processUtils'
 import { Timeout } from '../../utilities/timeoutUtils'
 import { removeAnsi } from '../../utilities/textUtilities'
@@ -20,7 +20,6 @@ const localize = nls.loadMessageBundle()
 
 export const waitForDebuggerMessages = {
     PYTHON: 'Debugger waiting for client...',
-    PYTHON_IKPDB: 'IKP3db listening on',
     NODEJS: 'Debugger listening on',
     DOTNET: 'Waiting for the debugger to attach...',
     GO_DELVE: 'launching process with args', // Comes from https://github.com/go-delve/delve/blob/f5d2e132bca763d222680815ace98601c2396517/service/debugger/debugger.go#L187

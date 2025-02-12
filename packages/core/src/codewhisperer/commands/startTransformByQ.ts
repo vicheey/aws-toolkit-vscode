@@ -6,8 +6,9 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs' // eslint-disable-line no-restricted-imports
 import path from 'path'
-import { getLogger } from '../../shared/logger'
+import { getLogger } from '../../shared/logger/logger'
 import * as CodeWhispererConstants from '../models/constants'
+import * as localizedText from '../../shared/localizedText'
 import {
     transformByQState,
     StepProgress,
@@ -75,10 +76,10 @@ import DependencyVersions from '../../amazonqGumby/models/dependencies'
 import { dependencyNoAvailableVersions } from '../../amazonqGumby/models/constants'
 import { HumanInTheLoopManager } from '../service/transformByQ/humanInTheLoopManager'
 import { setContext } from '../../shared/vscode/setContext'
-import { makeTemporaryToolkitFolder } from '../../shared'
 import globals from '../../shared/extensionGlobals'
 import { convertDateToTimestamp } from '../../shared/datetime'
 import { findStringInDirectory } from '../../shared/utilities/workspaceUtils'
+import { makeTemporaryToolkitFolder } from '../../shared/filesystemUtilities'
 
 function getFeedbackCommentData() {
     const jobId = transformByQState.getJobId()
@@ -118,6 +119,8 @@ async function validateJavaHome(): Promise<boolean> {
             javaVersionUsedByMaven = JDKVersion.JDK11
         } else if (javaVersionUsedByMaven === '17.') {
             javaVersionUsedByMaven = JDKVersion.JDK17
+        } else if (javaVersionUsedByMaven === '21.') {
+            javaVersionUsedByMaven = JDKVersion.JDK21
         }
     }
     if (javaVersionUsedByMaven !== transformByQState.getSourceJDKVersion()) {
@@ -233,7 +236,7 @@ export async function preTransformationUploadCode() {
     await vscode.commands.executeCommand('aws.amazonq.transformationHub.focus')
 
     void vscode.window.showInformationMessage(CodeWhispererConstants.jobStartedNotification, {
-        title: CodeWhispererConstants.jobStartedTitle,
+        title: localizedText.ok,
     })
 
     let uploadId = ''
@@ -653,14 +656,14 @@ export async function getValidSQLConversionCandidateProjects() {
         let resultLog = ''
         for (const project of javaProjects) {
             // as long as at least one of these strings is found, project contains embedded SQL statements
-            const searchStrings = ['oracle.jdbc.OracleDriver', 'jdbc:oracle:thin:@', 'jdbc:oracle:oci:@', 'jdbc:odbc:']
+            const searchStrings = ['oracle.jdbc.', 'jdbc:oracle:', 'jdbc:odbc:']
             for (const str of searchStrings) {
                 const spawnResult = await findStringInDirectory(str, project.path)
                 // just for telemetry purposes
                 if (spawnResult.error || spawnResult.stderr) {
-                    resultLog += `search failed: ${JSON.stringify(spawnResult)}`
+                    resultLog += `search error: ${JSON.stringify(spawnResult)}--`
                 } else {
-                    resultLog += `search succeeded: ${spawnResult.exitCode}`
+                    resultLog += `search complete (exit code: ${spawnResult.exitCode})--`
                 }
                 getLogger().info(`CodeTransformation: searching for ${str} in ${project.path}, result = ${resultLog}`)
                 if (spawnResult.exitCode === 0) {
@@ -750,7 +753,7 @@ export async function postTransformationJob() {
 
     if (transformByQState.isSucceeded()) {
         void vscode.window.showInformationMessage(CodeWhispererConstants.jobCompletedNotification(diffMessage), {
-            title: CodeWhispererConstants.transformationCompletedTitle,
+            title: localizedText.ok,
         })
     } else if (transformByQState.isPartiallySucceeded()) {
         void vscode.window
@@ -771,6 +774,12 @@ export async function postTransformationJob() {
 
     if (transformByQState.getPayloadFilePath() !== '') {
         fs.rmSync(transformByQState.getPayloadFilePath(), { recursive: true, force: true }) // delete ZIP if it exists
+    }
+
+    // attempt download for user
+    // TODO: refactor as explained here https://github.com/aws/aws-toolkit-vscode/pull/6519/files#r1946873107
+    if (transformByQState.isSucceeded() || transformByQState.isPartiallySucceeded()) {
+        await vscode.commands.executeCommand('aws.amazonq.transformationHub.reviewChanges.startReview')
     }
 }
 

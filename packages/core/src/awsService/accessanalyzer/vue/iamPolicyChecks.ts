@@ -6,7 +6,7 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs' // eslint-disable-line no-restricted-imports
 import * as path from 'path'
-import { getLogger, Logger } from '../../../shared/logger'
+import { getLogger, Logger } from '../../../shared/logger/logger'
 import { localize } from '../../../shared/utilities/vsCodeUtils'
 import { VueWebview, VueWebviewPanel } from '../../../webviews/main'
 import { ExtContext } from '../../../shared/extensions'
@@ -14,7 +14,7 @@ import { telemetry } from '../../../shared/telemetry/telemetry'
 import { AccessAnalyzer, SharedIniFileCredentials } from 'aws-sdk'
 import { ToolkitError } from '../../../shared/errors'
 import { makeTemporaryToolkitFolder, tryRemoveFolder } from '../../../shared/filesystemUtilities'
-import { globals } from '../../../shared'
+import globals from '../../../shared/extensionGlobals'
 import {
     IamPolicyChecksConstants,
     PolicyChecksCheckType,
@@ -179,7 +179,9 @@ export class IamPolicyChecksWebview extends VueWebview {
                             documentType,
                             inputPolicyType: policyType ? policyType : 'None',
                         })
-                        this.client.config.credentials = new SharedIniFileCredentials() // We need to detect changes in the user's credentials
+                        this.client.config.credentials = new SharedIniFileCredentials({
+                            profile: `${getProfileName()}`,
+                        }) // We need to detect changes in the user's credentials
                         this.client.validatePolicy(
                             {
                                 policyDocument: IamPolicyChecksWebview.editedDocument,
@@ -203,6 +205,7 @@ export class IamPolicyChecksWebview extends VueWebview {
                                         span.record({
                                             findingsCount: data.findings.length,
                                         })
+                                        // eslint-disable-next-line unicorn/no-array-for-each
                                         data.findings.forEach((finding: AccessAnalyzer.ValidatePolicyFinding) => {
                                             const message = `${finding.findingType}: ${finding.issueCode} - ${finding.findingDetails} Learn more: ${finding.learnMoreLink}`
                                             if ((finding.findingType as ValidatePolicyFindingType) === 'ERROR') {
@@ -276,6 +279,8 @@ export class IamPolicyChecksWebview extends VueWebview {
                         `${this.region}`,
                         '--config',
                         `${globals.context.asAbsolutePath(defaultTerraformConfigPath)}`,
+                        '--profile',
+                        `${getProfileName()}`,
                     ]
                     await this.executeValidatePolicyCommand({
                         command,
@@ -296,7 +301,15 @@ export class IamPolicyChecksWebview extends VueWebview {
             case 'CloudFormation': {
                 if (isCloudFormationTemplate(document)) {
                     const command = 'cfn-policy-validator'
-                    const args = ['validate', '--template-path', `${document}`, '--region', `${this.region}`]
+                    const args = [
+                        'validate',
+                        '--template-path',
+                        `${document}`,
+                        '--region',
+                        `${this.region}`,
+                        '--profile',
+                        `${getProfileName()}`,
+                    ]
                     if (cfnParameterPath !== '') {
                         args.push('--template-configuration-file', `${cfnParameterPath}`)
                     }
@@ -356,6 +369,8 @@ export class IamPolicyChecksWebview extends VueWebview {
                         `${tempFilePath}`,
                         '--reference-policy-type',
                         `${policyType}`,
+                        '--profile',
+                        `${getProfileName()}`,
                     ]
                     await this.executeCustomPolicyChecksCommand({
                         command,
@@ -387,6 +402,8 @@ export class IamPolicyChecksWebview extends VueWebview {
                         `${tempFilePath}`,
                         '--reference-policy-type',
                         `${policyType}`,
+                        '--profile',
+                        `${getProfileName()}`,
                     ]
                     if (cfnParameterPath !== '') {
                         args.push('--template-configuration-file', `${cfnParameterPath}`)
@@ -447,6 +464,8 @@ export class IamPolicyChecksWebview extends VueWebview {
                         `${this.region}`,
                         '--config',
                         `${globals.context.asAbsolutePath(defaultTerraformConfigPath)}`,
+                        '--profile',
+                        `${getProfileName()}`,
                     ]
                     if (actions !== '') {
                         args.push('--actions', `${actions}`)
@@ -479,6 +498,8 @@ export class IamPolicyChecksWebview extends VueWebview {
                         `${document}`,
                         '--region',
                         `${this.region}`,
+                        '--profile',
+                        `${getProfileName()}`,
                     ]
                     if (actions !== '') {
                         args.push('--actions', `${actions}`)
@@ -524,6 +545,8 @@ export class IamPolicyChecksWebview extends VueWebview {
                         `${this.region}`,
                         '--config',
                         `${globals.context.asAbsolutePath(defaultTerraformConfigPath)}`,
+                        '--profile',
+                        `${getProfileName()}`,
                     ]
                     await this.executeCustomPolicyChecksCommand({
                         command,
@@ -550,6 +573,8 @@ export class IamPolicyChecksWebview extends VueWebview {
                         `${document}`,
                         '--region',
                         `${this.region}`,
+                        '--profile',
+                        `${getProfileName()}`,
                     ]
                     if (cfnParameterPath !== '') {
                         args.push('--template-configuration-file', `${cfnParameterPath}`)
@@ -616,10 +641,12 @@ export class IamPolicyChecksWebview extends VueWebview {
                 getResultCssColor('Success'),
             ])
         } else {
+            // eslint-disable-next-line unicorn/no-array-for-each
             jsonOutput.BlockingFindings.forEach((finding: any) => {
                 this.pushValidatePolicyDiagnostic(diagnostics, finding, true)
                 findingsCount++
             })
+            // eslint-disable-next-line unicorn/no-array-for-each
             jsonOutput.NonBlockingFindings.forEach((finding: any) => {
                 this.pushValidatePolicyDiagnostic(diagnostics, finding, false)
                 findingsCount++
@@ -682,11 +709,13 @@ export class IamPolicyChecksWebview extends VueWebview {
                     getResultCssColor('Success'),
                 ])
             } else {
+                // eslint-disable-next-line unicorn/no-array-for-each
                 jsonOutput.BlockingFindings.forEach((finding: any) => {
                     this.pushCustomCheckDiagnostic(diagnostics, finding, true)
                     errorMessage = getCheckNoNewAccessErrorMessage(finding)
                     findingsCount++
                 })
+                // eslint-disable-next-line unicorn/no-array-for-each
                 jsonOutput.NonBlockingFindings.forEach((finding: any) => {
                     this.pushCustomCheckDiagnostic(diagnostics, finding, false)
                     findingsCount++
@@ -724,6 +753,7 @@ export class IamPolicyChecksWebview extends VueWebview {
             : finding.message
         const message = `${finding.findingType}: ${findingMessage} - Resource name: ${finding.resourceName}, Policy name: ${finding.policyName}`
         if (finding.details.reasons) {
+            // eslint-disable-next-line unicorn/no-array-for-each
             finding.details.reasons.forEach((reason: any) => {
                 diagnostics.push(
                     new vscode.Diagnostic(
@@ -917,6 +947,11 @@ export function isTerraformPlan(document: string) {
 export function isJsonPolicyLanguage(document: string) {
     const policyLanguageFileTypes = ['.json']
     return policyLanguageFileTypes.some((t) => document.endsWith(t))
+}
+
+export function getProfileName(): string | undefined {
+    // We neeed to split the name on 'profile:' to extract the correct profile name
+    return globals.awsContext.getCredentialProfileName()?.split('profile:')[1]
 }
 
 export class PolicyChecksError extends ToolkitError {
