@@ -58,7 +58,7 @@ export { onAcceptance } from './commands/onAcceptance'
 export { CodeWhispererTracker } from './tracker/codewhispererTracker'
 export { RecommendationHandler } from './service/recommendationHandler'
 export { CodeWhispererUserGroupSettings } from './util/userGroupUtil'
-export { CodeWhispererSessionState, CodeWhispererSession } from './util/codeWhispererSession'
+export { session } from './util/codeWhispererSession'
 export { onInlineAcceptance } from './commands/onInlineAcceptance'
 export { stopTransformByQ } from './commands/startTransformByQ'
 export { getCompletionItems, getCompletionItem, getLabel } from './service/completionProvider'
@@ -72,7 +72,12 @@ export { DocumentChangedSource, KeyStrokeHandler, DefaultDocumentChangedType } f
 export { ReferenceLogViewProvider } from './service/referenceLogViewProvider'
 export { LicenseUtil } from './util/licenseUtil'
 export { SecurityIssueProvider } from './service/securityIssueProvider'
-export { listScanResults, mapToAggregatedList, pollScanJobStatus } from './service/securityScanHandler'
+export {
+    listScanResults,
+    mapToAggregatedList,
+    pollScanJobStatus,
+    generateScanName,
+} from './service/securityScanHandler'
 export { CodeWhispererCodeCoverageTracker } from './tracker/codewhispererCodeCoverageTracker'
 export { TelemetryHelper } from './util/telemetryHelper'
 export { LineSelection, LineTracker } from './tracker/lineTracker'

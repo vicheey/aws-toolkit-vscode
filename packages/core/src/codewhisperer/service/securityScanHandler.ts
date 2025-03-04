@@ -39,12 +39,16 @@ import {
     SecurityScanTimedOutError,
     UploadArtifactToS3Error,
 } from '../models/errors'
-import { getTelemetryReasonDesc } from '../../shared/errors'
+import { getTelemetryReasonDesc, isAwsError } from '../../shared/errors'
 import { CodeWhispererSettings } from '../util/codewhispererSettings'
 import { detectCommentAboveLine } from '../../shared/utilities/commentUtils'
 import { runtimeLanguageContext } from '../util/runtimeLanguageContext'
 import { FeatureUseCase } from '../models/constants'
 import { UploadTestArtifactToS3Error } from '../../amazonqTest/error'
+import { ChatSessionManager } from '../../amazonqTest/chat/storages/chatSession'
+import { getStringHash } from '../../shared/utilities/textUtilities'
+import { getClientId } from '../../shared/telemetry/util'
+import globals from '../../shared/extensionGlobals'
 
 export async function listScanResults(
     client: DefaultCodeWhispererClient,
@@ -81,18 +85,20 @@ export async function listScanResults(
             // Do not use .. in between because there could be multiple project paths in the same parent dir.
             const filePath = path.join(projectPath, key.split('/').slice(1).join('/'))
             if (existsSync(filePath) && statSync(filePath).isFile()) {
+                const document = await vscode.workspace.openTextDocument(filePath)
                 const aggregatedCodeScanIssue: AggregatedCodeScanIssue = {
                     filePath: filePath,
-                    issues: issues.map((issue) => mapRawToCodeScanIssue(issue, editor, jobId, scope)),
+                    issues: issues.map((issue) => mapRawToCodeScanIssue(issue, document, jobId, scope)),
                 }
                 aggregatedCodeScanIssueList.push(aggregatedCodeScanIssue)
             }
         }
         const maybeAbsolutePath = `/${key}`
         if (existsSync(maybeAbsolutePath) && statSync(maybeAbsolutePath).isFile()) {
+            const document = await vscode.workspace.openTextDocument(maybeAbsolutePath)
             const aggregatedCodeScanIssue: AggregatedCodeScanIssue = {
                 filePath: maybeAbsolutePath,
-                issues: issues.map((issue) => mapRawToCodeScanIssue(issue, editor, jobId, scope)),
+                issues: issues.map((issue) => mapRawToCodeScanIssue(issue, document, jobId, scope)),
             }
             aggregatedCodeScanIssueList.push(aggregatedCodeScanIssue)
         }
@@ -102,18 +108,20 @@ export async function listScanResults(
 
 function mapRawToCodeScanIssue(
     issue: RawCodeScanIssue,
-    editor: vscode.TextEditor | undefined,
+    document: vscode.TextDocument,
     jobId: string,
     scope: CodeWhispererConstants.CodeAnalysisScope
 ): CodeScanIssue {
     const isIssueTitleIgnored = CodeWhispererSettings.instance.getIgnoredSecurityIssues().includes(issue.title)
-    const isSingleIssueIgnored =
-        editor &&
-        detectCommentAboveLine(editor.document, issue.startLine - 1, CodeWhispererConstants.amazonqIgnoreNextLine)
-    const language = editor
-        ? runtimeLanguageContext.getLanguageContext(editor.document.languageId, path.extname(editor.document.fileName))
-              .language
-        : 'plaintext'
+    const isSingleIssueIgnored = detectCommentAboveLine(
+        document,
+        issue.startLine - 1,
+        CodeWhispererConstants.amazonqIgnoreNextLine
+    )
+    const language = runtimeLanguageContext.getLanguageContext(
+        document.languageId,
+        path.extname(document.fileName)
+    ).language
     return {
         startLine: issue.startLine - 1 >= 0 ? issue.startLine - 1 : 0,
         endLine: issue.endLine,
@@ -386,6 +394,9 @@ export async function uploadArtifactToS3(
         } else {
             errorMessage = errorDesc ?? defaultMessage
         }
+        if (isAwsError(error) && featureUseCase === FeatureUseCase.TEST_GENERATION) {
+            ChatSessionManager.Instance.getSession().startTestGenerationRequestId = error.requestId
+        }
         throw isCodeScan ? new UploadArtifactToS3Error(errorMessage) : new UploadTestArtifactToS3Error(errorMessage)
     }
 }
@@ -408,4 +419,22 @@ function getPollingTimeoutMsForScope(scope: CodeWhispererConstants.CodeAnalysisS
     return scope === CodeWhispererConstants.CodeAnalysisScope.FILE_AUTO
         ? CodeWhispererConstants.expressScanTimeoutMs
         : CodeWhispererConstants.standardScanTimeoutMs
+}
+
+/**
+ * Generates a scanName that unique identifies a user's workspace configuration for a Q code review.
+ *
+ * @param projectPaths List of project root paths
+ * @param scope {@link CodeWhispererConstants.CodeAnalysisScope} Scope of files included in the code review
+ * @param fileName File name of the file being reviewed, or pass undefined for workspace review
+ * @returns A string hash that uniquely identifies the workspace configuration
+ */
+export function generateScanName(
+    projectPaths: string[],
+    scope: CodeWhispererConstants.CodeAnalysisScope,
+    fileName?: string
+) {
+    const clientId = getClientId(globals.globalState)
+    const projectId = fileName ?? projectPaths.sort((a, b) => a.localeCompare(b)).join(',')
+    return getStringHash(`${clientId}::${projectId}::${scope}`)
 }
