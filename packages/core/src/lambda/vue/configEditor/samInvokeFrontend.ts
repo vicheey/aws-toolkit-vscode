@@ -48,6 +48,8 @@ interface SamInvokeVueData {
     showNameInput: boolean
     newTestEventName: string
     resourceData: ResourceData | undefined
+    invokeInProgress: boolean
+    invokeTitle: string
 }
 
 function newLaunchConfig(existingConfig?: AwsSamDebuggerConfiguration): AwsSamDebuggerConfigurationLoose {
@@ -134,7 +136,26 @@ export default defineComponent({
     },
     created() {
         this.setUpWebView()
+
+        // Register for invoke progress events
+        void client
+            .onInvokeProgress((event) => {
+                this.invokeTitle = event.message
+                if (event.status === 'start') {
+                    this.invokeInProgress = true
+                } else if (event.status === 'success' || event.status === 'error') {
+                    this.invokeInProgress = false
+                    // Could also add UI feedback based on the status and message
+                    if (event.status === 'error') {
+                        console.error(`Invoke error: ${event.message}`)
+                    }
+                }
+            })
+            .catch((e) => {
+                console.error('Failed to register invoke progress handler:', e)
+            })
     },
+
     mixins: [saveData],
     data(): SamInvokeVueData {
         return {
@@ -152,6 +173,8 @@ export default defineComponent({
             selectedFile: '',
             selectedFilePath: '',
             resourceData: undefined,
+            invokeInProgress: false,
+            invokeTitle: 'Invoke',
         }
     },
     methods: {
@@ -168,11 +191,19 @@ export default defineComponent({
                 return // Exit early if config is not available
             }
 
+            // Note: We don't need to set invokeInProgress = true here
+            // because we'll receive an event from the backend when it starts
             const source = this.resourceData?.source
 
-            client.invokeLaunchConfig(config, source).catch((e: Error) => {
+            try {
+                // Delegate to the backend
+                await client.invokeLaunchConfig(config, source)
+            } catch (e: any) {
                 console.error(`invokeLaunchConfig failed: ${e.message}`)
-            })
+                // We still set this to false in case the event wasn't received
+                this.invokeInProgress = false
+                this.invokeTitle = 'Invoke'
+            }
         },
         save() {
             const config = this.formatConfig()

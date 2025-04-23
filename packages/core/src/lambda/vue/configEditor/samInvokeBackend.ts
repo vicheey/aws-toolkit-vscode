@@ -344,10 +344,17 @@ export class SamInvokeWebview extends VueWebview {
         }
     }
 
+    // Add an event emitter for invoke progress updates
+    public readonly onInvokeProgress = new vscode.EventEmitter<{
+        status: 'start' | 'success' | 'error'
+        message: string
+    }>()
+
     /**
-     * Validate and execute the provided launch config.
+     * Validate and execute the provided launch config with a progress indicator in the VS Code window.
      * TODO: Post validation failures back to webview?
      * @param config Config to invoke
+     * @param source Optional source identifier
      */
     public async invokeLaunchConfig(config: AwsSamDebuggerConfiguration, source?: string): Promise<void> {
         const finalConfig = finalizeConfig(
@@ -357,9 +364,42 @@ export class SamInvokeWebview extends VueWebview {
         const targetUri = await this.getUriFromLaunchConfig(finalConfig)
         const folder = targetUri ? vscode.workspace.getWorkspaceFolder(targetUri) : undefined
 
-        // startDebugging on VS Code goes through the whole resolution chain
-        await vscode.debug.startDebugging(folder, finalConfig)
+        // Get function name to display in progress message
+        let functionName = 'Function'
+        if (config.invokeTarget.target === 'template' || config.invokeTarget.target === 'api') {
+            functionName = config.invokeTarget.logicalId
+        } else if (config.invokeTarget.target === 'code') {
+            functionName = config.name || config.invokeTarget.lambdaHandler
+        }
+
+        // Emit start progress event
+        this.onInvokeProgress.fire({ status: 'start', message: 'Invoking...' })
+
+        try {
+            // Use withProgress in the extension host context
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Window,
+                    title: localize('AWS.lambda.local.invoke.progressTitle', 'Invoke Local Function'),
+                    cancellable: false,
+                },
+                async (progress) => {
+                    // Start debugging
+                    progress.report({
+                        message: `${functionName}`,
+                    })
+                    return await vscode.debug.startDebugging(folder, finalConfig)
+                }
+            )
+            // Emit success progress event
+            this.onInvokeProgress.fire({ status: 'success', message: 'Succeeded' })
+        } catch (error) {
+            // Emit error progress event
+            this.onInvokeProgress.fire({ status: 'error', message: 'Failed' })
+            throw error
+        }
     }
+
     public async getLaunchConfigQuickPickItems(
         launchConfig: LaunchConfiguration,
         uri: vscode.Uri

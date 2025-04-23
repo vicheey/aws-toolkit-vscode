@@ -280,6 +280,8 @@
     "AWS.configuration.description.threatComposer.defaultEditor": "Use Threat Composer as the default editor for *.tc.json files.",
     "AWS.command.accessanalyzer.iamPolicyChecks": "Open IAM Policy Checks",
     "AWS.lambda.explorerTitle": "Explorer",
+    "AWS.lambda.local.invoke.progressTitle": "Invoke Local Function",
+    "AWS.lambda.remote.invoke.progressTitle": "Invoke Remote Function",
     "AWS.developerTools.explorerTitle": "Developer Tools",
     "AWS.codewhisperer.explorerTitle": "CodeWhisperer",
     "AWS.appcomposer.explorerTitle": "Infrastructure Composer",
